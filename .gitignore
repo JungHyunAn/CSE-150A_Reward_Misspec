@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.conda/
+.mplconfig/
+runs/
+.DS_Store
