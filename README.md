@@ -26,11 +26,36 @@ The default output directory is `runs/forked-maze/`. It contains per-seed counts
 
 Forked maze is a 15×15 grid with the start at the top left and the goal at the bottom right. Three obstacles move within the same central 5×5 region. Each obstacle stays with probability 0.5 and otherwise proposes a cardinal move within the region. Proposals into an occupied cell or a cell targeted by multiple obstacles are canceled.
 
-The robot takes one cardinal action at a time. The Q-table key is the robot's absolute position and the sorted relative offsets of obstacles currently visible in its robot-centered 5×5 window. This observation omits obstacles outside the window and the remaining time budget.
+### State and Q-table observation
+
+Positions are zero-based $(\mathrm{row},\mathrm{col})$ pairs measured from the top-left corner. Rows increase downward and columns increase rightward. Let $p_t$ be the robot position, $b_{t,i}$ the position of obstacle $i$, and $h_t$ the number of actions already taken in the episode.
+
+```math
+\begin{aligned}
+s_t &= (p_t,b_{t,1},b_{t,2},b_{t,3},h_t),\\
+o_t &= \left(p_t,\operatorname{sort}\left\{
+    b_{t,i}-p_t \;\middle|\; i\in\{1,2,3\},
+    \;\lVert b_{t,i}-p_t\rVert_\infty \le 2
+    \right\}\right).
+\end{aligned}
+```
+
+The full state $s_t$ includes all obstacle positions and the episode clock, which the training loop tracks separately. The Q-table key is the partial observation $o_t$. It stores the absolute robot position as a free-cell index and the visible obstacle offsets as a tuple sorted by row, then column. An obstacle is visible when both its row and column offsets are within two cells. An empty tuple represents a view with zero visible obstacles.
 
 ![Forked maze showing the start, goal, robot, three moving obstacles, and the robot's local observation window](docs/forked-maze-environment.png)
 
-At step 9 of the fixed demonstration, two obstacles are inside the robot's observation window. The third obstacle is outside the window and continues to move in the simulator.
+At step 9 of the fixed demonstration, the robot is at $(4,5)$ and the simulator has obstacles at $(8,7)$, $(5,7)$, and $(6,5)$. The observation is $o_9=((4,5),((1,2),(2,0)))$. The obstacle at $(8,7)$ is outside the view.
+
+### Action space
+
+Each observation has four Q-values, one per action. The selected action proposes a move from $(r,c)$ to $(r+\Delta r,c+\Delta c)$.
+
+| Action ID | Direction | Displacement |
+| --- | --- | --- |
+| 0 | East (right) | `(0, +1)` |
+| 1 | South (down) | `(+1, 0)` |
+| 2 | West (left) | `(0, -1)` |
+| 3 | North (up) | `(-1, 0)` |
 
 An episode ends on delivery, collision, or timeout at 100 actions. Entering a wall, crossing the boundary, sharing an obstacle's destination cell, or swapping cells with an obstacle counts as a collision. The task reward charges 0.1 per action, adds 10 on delivery, and subtracts 10 on collision.
 
