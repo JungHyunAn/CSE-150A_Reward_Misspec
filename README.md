@@ -1,10 +1,8 @@
 # Reward Misspecification in Tabular Reinforcement Learning
 
-CSE 150A/250A team project. Train tabular Q-learning agents on a deterministic delivery task to measure how progress bonuses affect delivery efficiency and repeated visits.
+CSE 150A/250A team project. We compare three training rewards for tabular Q-learning in a delivery maze with moving obstacles and measure how shaping affects delivery, collision, and timeout rates.
 
-## Set up and run
-
-Clone the repository, then run from its root. The Conda environment uses Python 3.12 and pins the numerical and plotting dependencies.
+## Run the experiment
 
 ```sh
 git clone https://github.com/JungHyunAn/CSE-150A_Reward_Misspec.git
@@ -14,50 +12,81 @@ conda activate cse150a-gridworld
 python -m reward_gridworld
 ```
 
-The default sweep trains nine conditions with seeds 0–4, 5,000 episodes per seed and condition, and greedy evaluation every 100 episodes. A quick smoke run uses one seed and one bonus strength.
+The default Forked maze run trains seeds 0–19 for 1,300,000 actions each, with 200 matched greedy evaluation scenarios per seed at each checkpoint. The checkpoints are 40k, 100k, 200k, 400k, 600k, and every 50k from 800k to 1,300k. The default uses four workers. Use `--workers 1` for a serial run.
+
+Quick smoke run:
 
 ```sh
-python -m reward_gridworld --episodes 100 --eval-every 25 --seeds 0 --alphas 2 --out runs/smoke
+python -m reward_gridworld --checkpoints 100 200 --seeds 0 --eval-episodes 5 --exploration-steps 200 --workers 1 --out runs/smoke
 ```
 
-Use `python -m reward_gridworld --help` for the full set of options. After a dependency change, update with `conda env update -f environment.yml --prune`.
+The default output directory is `runs/forked-maze/`. It contains per-seed counts (`seed-checkpoints.csv`), aggregated rates (`summary.csv`), settings (`config.json`), and the two figures linked below.
 
-## Delivery task
+## Task and observation
 
-```text
-S.....
-.###..
-...#..
-.#....
-.#..#.
-.....G
-```
+Forked maze is a 15×15 grid with the start at the top left and the goal at the bottom right. Three obstacles move within the same central 5×5 region. Each obstacle stays with probability 0.5 and otherwise proposes a cardinal move within the region. Proposals into an occupied cell or a cell targeted by multiple obstacles are canceled.
 
-`S` is the start, `G` is the goal, and `#` marks walls. The state contains the position and the number of actions remaining. North, south, east, and west moves into a wall or the boundary leave the position unchanged and consume one action. Episodes end on delivery or after 100 actions. The shortest delivery takes 10 actions.
+The robot takes one cardinal action at a time. The Q-table key is the robot's absolute position and the sorted relative offsets of obstacles currently visible in its robot-centered 5×5 window. This observation omits obstacles outside the window and the remaining time budget.
 
-The task reward charges 0.1 per action and adds 10 on delivery, with discount γ = 0.99. All agents use learning rate 0.2 and the same epsilon schedule, which decays linearly from 1.0 to 0.05 over the first 80% of training.
+An episode ends on delivery, collision, or timeout at 100 actions. Entering a wall, crossing the boundary, sharing an obstacle's destination cell, or swapping cells with an obstacle counts as a collision. The task reward charges 0.1 per action, adds 10 on delivery, and subtracts 10 on collision.
 
-| Training reward | Term added to the task reward |
+$$
+r_t^{\mathrm{task}}
+= -0.1 + 10\,\mathbf{1}_{\{\mathrm{delivery}\}} - 10\,\mathbf{1}_{\{\mathrm{collision}\}}.
+$$
+
+## Training rewards
+
+Let $p$ be the robot position and $d_{\mathrm{maze}}(p,q)$ the shortest path distance through the static maze. Let $p_0,\ldots,p_L$ be the cells of the fixed successful demonstration, with $i^*(p)$ denoting the index of the nearest demonstration cell under $d_{\mathrm{maze}}$. Ties choose the largest index.
+
+| Method | Potential at a nonterminal position $p$ |
 | --- | --- |
-| Baseline | 0 |
-| Positive-only progress | α × max(0, d(s) − d(s′)) |
-| Potential-based | γΦ(s′) − Φ(s) |
+| Baseline | $0$ |
+| Distance PBRS | $-\alpha\,d_{\mathrm{maze}}(p,g)$, where $g$ is the goal |
+| Demo PBRS | $-\alpha\,\left[(L-i^*(p)) + 2\,d_{\mathrm{maze}}(p,p_{i^*(p)})\right]$ |
 
-Here d is Manhattan distance to the goal. The potential Φ is −αd before termination and zero after either delivery or timeout. The two shaping methods use α ∈ {0.1, 0.5, 1, 2}. Greedy evaluation starts at the fixed start and breaks tied actions in east, south, west, north order.
+Both potential-based reward shaping (PBRS) methods use $\alpha=0.10$ and the same discount $\gamma=0.99$ as Q-learning. The learner receives
 
-## Outputs
+$$
+r_t^{(m)} = r_t^{\mathrm{task}} + \gamma\Phi_m(p_{t+1}) - \Phi_m(p_t).
+$$
 
-| File in `runs/default/` | Contents |
-| --- | --- |
-| `learning_curves.png` | Task return, success rate, episode length, and repeated entries over training. Shows the baseline and shaped conditions at the largest α, with mean and one standard deviation across seeds. The dotted line marks the optimal task return. |
-| `alpha_sweep.png` | Final metrics across all bonus strengths, with the baseline mean for reference. |
-| `trajectories.png` | Final greedy paths for the first supplied seed, using the same three conditions as the learning curves. Thicker arrows indicate more traversals. |
-| `learning.csv`, `final.csv` | Per-seed checkpoint and final metrics, including discounted return under both the task reward and the condition's training reward. |
-| `optimal.csv` | Exact finite-horizon greedy reference for each reward, computed by backward induction. This gives a reference for what each reward optimizes under full planning. |
-| `config.json` | Layout, hyperparameters, seeds, and evaluation settings. |
+For delivery, collision, and timeout, the successor potential is zero. Over a complete rollout the shaping terms telescope, so the shaped discounted return equals the task return minus the initial potential. All three methods start each evaluation at the same robot position.
 
-A repeated entry counts a move into any previously visited cell, including the start. Actions that leave the agent in place have their own blocked-move count. For a given seed and checkpoint, the evaluation is one deterministic rollout from the fixed start. Success and timeout rates are computed across seeds.
+## Q-learning update
+
+Let $o_t$ denote the local observation and $d_t$ indicate episode termination. After each sampled transition, the learner uses
+
+$$
+y_t =
+\begin{cases}
+r_t^{(m)}, & d_t=1,\\
+r_t^{(m)}+\gamma\max_{a'}Q_t(o_{t+1},a'), & d_t=0,
+\end{cases}
+\qquad
+Q_{t+1}(o_t,a_t)=Q_t(o_t,a_t)+\eta\left[y_t-Q_t(o_t,a_t)\right].
+$$
+
+The learning rate is $\eta=0.20$. Training uses an $\epsilon$-greedy policy with $\epsilon$ decaying linearly from 1.0 to 0.05 over the first 320k updates and staying at 0.05 afterward. Evaluation freezes the table, uses greedy actions, and breaks ties in east, south, west, north order. Each method uses the same evaluation RNG seed for a given training seed and scenario index.
+
+## Results
+
+![Stacked timeout and collision rates across all checkpoints](results/forked-maze/failure-rates.png)
+
+Each segment uses all 4,000 evaluation episodes for its method and checkpoint as the denominator. Timeout includes every episode that reaches the action limit without delivery or collision. The stack height is the total failure rate. A two-cell-loop timeout alternates between two distinct robot cells for the final 20 moves before a timeout.
+
+| Method | Timeout | Collision | Total failure | Two-cell-loop timeout |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 7.94% | 13.30% | 21.24% | 2.86% |
+| Distance PBRS | 19.16% | 3.93% | 23.09% | 7.89% |
+| Demo PBRS | 16.44% | 2.42% | 18.85% | 5.48% |
+
+Values are averages over the 11 checkpoints from 800k to 1,300k and rounded independently. Both PBRS methods had fewer collisions and more timeouts than baseline over this interval. Paired 95% seed-bootstrap intervals for the difference in mean total failure compared with baseline included zero for both methods.
+
+At 1,000k, two-cell loops accounted for 607 of Demo PBRS's 915 timeouts. At 1,200k, they accounted for 724 of Distance PBRS's 1,102 timeouts. Baseline rollouts also exhibited two-cell loops. The diagnostic describes behavior at the evaluated checkpoints.
+
+[Loop-rate figure](results/forked-maze/two-cell-loop-timeouts.png) · [Checkpoint summaries](results/forked-maze/summary.csv) · [Per-seed counts](results/forked-maze/seed-checkpoints.csv) · [Experiment settings](results/forked-maze/config.json)
 
 ## Contributing
 
-Create a branch for changes and open a pull request into `main`. Put simulator and reward changes in `reward_gridworld/gridworld.py`, learning changes in `reward_gridworld/learning.py`, and figure changes in `reward_gridworld/visualization.py`. Use the smoke command before opening a pull request. Keep generated runs and local environments out of Git.
+Create a branch for changes and open a pull request into `main`. Run the smoke command before opening a pull request. Keep other generated runs and local environments out of Git.
