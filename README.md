@@ -33,14 +33,11 @@ Positions are zero-based $(\mathrm{row},\mathrm{col})$ pairs measured from the t
 ```math
 \begin{aligned}
 s_t &= (p_t,b_{t,1},b_{t,2},b_{t,3},h_t),\\
-o_t &= \left(p_t,\operatorname{sort}\left\{
-    b_{t,i}-p_t \;\middle|\; i\in\{1,2,3\},
-    \;\lVert b_{t,i}-p_t\rVert_\infty \le 2
-    \right\}\right).
+o_t &= (p_t,v_t).
 \end{aligned}
 ```
 
-The full state $s_t$ includes all obstacle positions and the episode clock, which the training loop tracks separately. The Q-table key is the partial observation $o_t$. It stores the absolute robot position as a free-cell index and the visible obstacle offsets as a tuple sorted by row, then column. An obstacle is visible when both its row and column offsets are within two cells. An empty tuple represents a view with zero visible obstacles.
+The full state $s_t$ includes all obstacle positions and the episode clock, which the training loop tracks separately. The Q-table uses the partial observation $o_t$ and stores $p_t$ as a free-cell index. The tuple $v_t$ contains the offsets $b_{t,i}-p_t$ of visible obstacles, sorted by row and then column. An obstacle is visible when both absolute offsets are at most two cells. A view with zero visible obstacles has an empty tuple.
 
 ![Forked maze showing the start, goal, robot, three moving obstacles, and the robot's local observation window](docs/forked-maze-environment.png)
 
