@@ -1,0 +1,120 @@
+{
+  "scene": {
+    "name": "forked-maze",
+    "title": "Forked maze",
+    "layout": [
+      "S......#.......",
+      ".#.###.#.##.##.",
+      "..#....#....#..",
+      "..##.#####.##..",
+      ".......#.......",
+      "..#.........#..",
+      "#.##.......##.#",
+      "...............",
+      "..#.........#..",
+      "###.........#.#",
+      "...#...###.#...",
+      "..###.##....#..",
+      ".......#.##.##.",
+      "#.##...#....#.#",
+      "...#...#......G"
+    ],
+    "region_origins": [
+      [
+        5,
+        5
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        5,
+        5
+      ]
+    ],
+    "demo_actions": "SSESSEEEEESEEEESSSSSSESSSEEE",
+    "demo_trial": 0
+  },
+  "methods": [
+    {
+      "name": "baseline",
+      "label": "Baseline",
+      "potential_alpha": 0.0,
+      "demo_guided": false
+    },
+    {
+      "name": "distance-pbrs",
+      "label": "Distance PBRS",
+      "potential_alpha": 0.1,
+      "demo_guided": false
+    },
+    {
+      "name": "demo-pbrs",
+      "label": "Demo PBRS",
+      "potential_alpha": 0.1,
+      "demo_guided": true
+    }
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "checkpoints": [
+    40000,
+    100000,
+    200000,
+    400000,
+    600000,
+    800000,
+    850000,
+    900000,
+    950000,
+    1000000,
+    1050000,
+    1100000,
+    1150000,
+    1200000,
+    1250000,
+    1300000
+  ],
+  "evaluation_episodes_per_seed": 200,
+  "evaluation_seed_pattern": "maze-eval:{scene}:{seed}:{scenario}",
+  "observation": "robot position and visible obstacle offsets",
+  "view_radius": 2,
+  "gamma": 0.99,
+  "learning_rate": 0.2,
+  "episode_horizon": 100,
+  "task_reward": {
+    "step": -0.1,
+    "delivery_bonus": 10.0,
+    "collision_penalty": 10.0
+  },
+  "exploration_steps": 400000,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "epsilon_decay_fraction": 0.8,
+  "terminal_timeout": true,
+  "demo_distance_weight": 2,
+  "two_cell_loop_steps": 20,
+  "bootstrap_replicates": 10000,
+  "bootstrap_seed": 240914
+}
