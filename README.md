@@ -28,6 +28,10 @@ Forked maze is a 15×15 grid with the start at the top left and the goal at the 
 
 The robot takes one cardinal action at a time. The Q-table key is the robot's absolute position and the sorted relative offsets of obstacles currently visible in its robot-centered 5×5 window. This observation omits obstacles outside the window and the remaining time budget.
 
+![Forked maze showing the start, goal, robot, three moving obstacles, and the robot's local observation window](docs/forked-maze-environment.png)
+
+At step 9 of the fixed demonstration, two obstacles are inside the robot's observation window. The third obstacle is outside the window and continues to move in the simulator.
+
 An episode ends on delivery, collision, or timeout at 100 actions. Entering a wall, crossing the boundary, sharing an obstacle's destination cell, or swapping cells with an obstacle counts as a collision. The task reward charges 0.1 per action, adds 10 on delivery, and subtracts 10 on collision.
 
 $$
@@ -37,13 +41,16 @@ $$
 
 ## Training rewards
 
-Let $p$ be the robot position and $d_{\mathrm{maze}}(p,q)$ the shortest path distance through the static maze. Let $p_0,\ldots,p_L$ be the cells of the fixed successful demonstration, with $i^*(p)$ denoting the index of the nearest demonstration cell under $d_{\mathrm{maze}}$. Ties choose the largest index.
+Let $p$ be the robot position, $g$ the goal, and $d_{\mathrm{maze}}(p,q)$ the shortest path distance through the static maze. The fixed demonstration visits $p_0,\ldots,p_L$. The index $i_{\star}(p)$ selects the nearest demonstration cell by maze distance, with ties favoring the largest index.
 
-| Method | Potential at a nonterminal position $p$ |
-| --- | --- |
-| Baseline | $0$ |
-| Distance PBRS | $-\alpha\,d_{\mathrm{maze}}(p,g)$, where $g$ is the goal |
-| Demo PBRS | $-\alpha\,\left[(L-i^*(p)) + 2\,d_{\mathrm{maze}}(p,p_{i^*(p)})\right]$ |
+```math
+\begin{aligned}
+\Phi_{\mathrm{baseline}}(p) &= 0,\\
+\Phi_{\mathrm{distance}}(p) &= -\alpha\,d_{\mathrm{maze}}(p,g),\\
+\Phi_{\mathrm{demo}}(p) &= -\alpha\left[(L-i_{\star}(p))
+    + 2\,d_{\mathrm{maze}}\bigl(p,p_{i_{\star}(p)}\bigr)\right].
+\end{aligned}
+```
 
 Both potential-based reward shaping (PBRS) methods use $\alpha=0.10$ and the same discount $\gamma=0.99$ as Q-learning. The learner receives
 
